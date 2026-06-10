@@ -1,4 +1,4 @@
-.PHONY: test test-firmware test-software clean
+.PHONY: test test-firmware test-software docs docs-serve hooks check clean
 
 test: test-firmware test-software
 
@@ -10,5 +10,18 @@ test-firmware:
 test-software:
 	PYTHONPATH=software/src python3 -m unittest discover -s software/tests -v
 
+docs:
+	uv run --project software --extra docs mkdocs build --strict
+
+docs-serve:
+	uv run --project software --extra docs mkdocs serve
+
+hooks:
+	uv run --project software --extra dev pre-commit run --all-files
+
+check: test docs hooks
+	uv run --project software --extra dev mypy software/src
+
 clean:
 	cmake -E remove_directory build
+	cmake -E remove_directory site

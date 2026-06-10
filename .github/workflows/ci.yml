@@ -22,7 +22,7 @@ jobs:
           python-version: "3.12"
       - run: python -m pip install -e 'software[dev]'
       - run: pytest software/tests
-      - run: ruff check software
+      - run: pre-commit run --all-files
       - run: mypy software/src
 
   docs:

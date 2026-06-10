@@ -30,10 +30,22 @@ uv pip install -e 'software[dev,docs]'
 
 ## 提交前检查
 
+首次安装 Git 提交钩子：
+
 ```bash
-make test
-uv run ruff check software
-uv run mypy software/src
+uv run --project software --extra dev pre-commit install
+```
+
+钩子会在提交时检查基础文件格式、YAML 和 Python Ruff 规则。也可以手动检查仓库中的全部文件：
+
+```bash
+make hooks
+```
+
+完整检查包括固件与上位机测试、静态检查和文档严格构建：
+
+```bash
+make check
 ```
 
 依赖下载需要网络；基础 C++ 和 Python 单元测试不需要下载第三方依赖。
