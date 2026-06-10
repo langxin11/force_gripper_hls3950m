@@ -2,7 +2,7 @@
 
 面向飞特 HLS3950 总线舵机的双指力控夹爪项目。本仓库从通信、控制、机械和上位机四个层面重新设计，目标是保留原力控夹爪的研究能力，同时解除对 DYNAMIXEL 协议和特定机械尺寸的依赖。
 
-> 当前状态：架构与可测试控制骨架已建立；首阶段使用 Arduino Uno R3、飞特驱动板和官方 `FTServo_Arduino/HLSCL` 完成真机台架验证。
+> 当前状态：架构与可测试控制骨架已建立；首阶段使用电脑、飞特 URT-1 和固定版本的 `FTServo_Python` 完成真机台架验证。
 
 ## 设计原则
 
@@ -44,6 +44,13 @@ PYTHONPATH=software/src python -m hls3950_gripper.cli --simulate status
 - [HLS3950 适配清单](docs/hls3950-adaptation.md)
 - [开发与测试](docs/development.md)
 - [实施路线图](docs/roadmap.md)
+
+严格构建文档或启动本地预览：
+
+```bash
+make docs
+make docs-serve
+```
 
 ## 开源许可
 
