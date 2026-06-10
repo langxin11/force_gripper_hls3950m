@@ -1,0 +1,16 @@
+/build/
+/site/
+/.cache/
+/.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.pio/
+.idea/
+.vscode/
+*.swp
+*~

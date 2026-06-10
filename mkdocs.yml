@@ -1,0 +1,20 @@
+site_name: HLS3950 力控夹爪
+site_description: HLS3950 双指力控夹爪中文工程文档
+docs_dir: docs
+theme:
+  name: material
+  language: zh
+nav:
+  - 首页: index.md
+  - 总体架构: architecture.md
+  - HLS3950 适配: hls3950-adaptation.md
+  - 主机通信协议: host-protocol.md
+  - 开发与测试: development.md
+  - 实施路线图: roadmap.md
+  - 架构决策:
+      - 分层架构: adr/0001-layered-architecture.md
+markdown_extensions:
+  - admonition
+  - tables
+  - toc:
+      permalink: true
