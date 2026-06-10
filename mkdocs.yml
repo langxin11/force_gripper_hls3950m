@@ -9,6 +9,7 @@ nav:
   - 总体架构: architecture.md
   - HLS3950 适配: hls3950-adaptation.md
   - 飞特 Python 依赖: feetech-python-dependency.md
+  - URT-1 接线: urt1-wiring.md
   - 机械改造清单: mechanical-changes.md
   - 主机通信协议: host-protocol.md
   - 开发与测试: development.md
