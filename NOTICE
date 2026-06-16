@@ -1,0 +1,12 @@
+force_gripper_hls3950
+Copyright 2026 langxin11
+
+This project contains original code, documentation, and design notes licensed
+under the Apache License, Version 2.0.
+
+Reference STEP, STL, and image assets copied or adapted from
+Shua-Kang/force_gripper_hardware are identified in the hardware and
+documentation provenance notes. Those third-party reference assets were
+imported from a repository without an explicit license and are not covered by
+this project's Apache-2.0 license unless separate permission is obtained from
+their copyright holder.

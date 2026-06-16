@@ -1,0 +1,18 @@
+Asset provenance
+================
+
+The image files in this directory were copied from
+Shua-Kang/force_gripper_hardware at commit
+ff68bf4fce071ca1d055616c89dba56ccfd226d8.
+
+Local file                         Original path
+fingertip-holder.png               imgs/printing/figure_tip_holder.png
+idler-pulley.png                   imgs/printing/idler_pulley.png
+umi-fingertip.png                  imgs/printing/umi_figuretip.png
+linear-rail-installation.webp      imgs/assemble_imgs/linear_rail.png
+finger-belt-installation.webp      imgs/assemble_imgs/figure.png
+
+The two WebP files are resized documentation copies. The source repository did
+not contain an explicit license when these files were imported. These assets
+are not covered by any future project license unless permission is obtained
+from the original author.

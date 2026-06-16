@@ -8,7 +8,7 @@ test-firmware:
 	ctest --test-dir build/firmware --output-on-failure
 
 test-software:
-	PYTHONPATH=software/src python3 -m unittest discover -s software/tests -v
+	uv run --project software --extra dev pytest software/tests -v
 
 docs:
 	uv run --project software --extra docs mkdocs build --strict
@@ -24,4 +24,5 @@ check: test docs hooks
 
 clean:
 	cmake -E remove_directory build
+	# Remove the pre-build/docs MkDocs output during the transition.
 	cmake -E remove_directory site

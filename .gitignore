@@ -1,4 +1,5 @@
 /build/
+# Legacy MkDocs output; new builds use build/docs/.
 /site/
 /.cache/
 /.venv/

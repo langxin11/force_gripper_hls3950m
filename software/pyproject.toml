@@ -7,6 +7,7 @@ name = "hls3950-gripper"
 version = "0.1.0"
 description = "HLS3950 力控夹爪上位机 SDK 与命令行工具"
 readme = "README.md"
+license = { text = "Apache-2.0" }
 requires-python = ">=3.10"
 dependencies = ["pyserial>=3.5"]
 
@@ -21,6 +22,9 @@ dev = [
 docs = [
   "mkdocs>=1.6",
   "mkdocs-material>=9.5",
+]
+hardware = [
+  "vassar-feetech-servo-sdk==1.5.0",
 ]
 
 [project.scripts]
@@ -39,4 +43,11 @@ select = ["E", "F", "I", "UP", "B"]
 [tool.mypy]
 python_version = "3.10"
 strict = true
+
+[[tool.mypy.overrides]]
+module = [
+    "serial.*",
+    "scservo_sdk.*",
+    "vassar_feetech_servo_sdk.*",
+]
 ignore_missing_imports = true

@@ -10,15 +10,19 @@ cmake --build build/firmware
 ctest --test-dir build/firmware --output-on-failure
 ```
 
-新增控制逻辑时，应先使用 `FakeServoBus` 覆盖正常、断线和部分写入失败场景，再接入控制板适配层。
+新增控制逻辑时，应先使用 `FakeServoBus` 覆盖正常、断线和部分写入失败场景，再接入后续真实总线实现。
 
 ## Python 上位机
 
 零依赖测试和仿真命令：
 
 ```bash
-PYTHONPATH=software/src python3 -m unittest discover -s software/tests -v
+uv run --project software --extra dev pytest software/tests -v
 PYTHONPATH=software/src python3 -m hls3950_gripper.cli --simulate status
+```
+pytest 兼容 unittest.TestCase，无需改写已有测试。
+
+```bash
 ```
 
 开发环境安装：
@@ -49,3 +53,9 @@ make check
 ```
 
 依赖下载需要网络；基础 C++ 和 Python 单元测试不需要下载第三方依赖。
+
+## 参见
+
+- [总体架构](architecture.md)：控制核心的分层设计和安全边界。
+- [主机通信协议](host-protocol.md)：命令格式和错误语义。
+- [HLS3950 通信适配](hls3950-adaptation.md)：真机 SDK 安装和台架验证顺序。

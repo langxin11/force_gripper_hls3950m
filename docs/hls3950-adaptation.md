@@ -1,27 +1,35 @@
-# HLS3950 适配清单
+# HLS3950 通信适配
 
-## 官方库选择
+## 当前路线
 
-当前台架使用电脑通过飞特 `URT-1` 直接连接 HLS3950 总线，因此采用飞特官方
-[`FTServo_Python`](https://github.com/ftservo/FTServo_Python) 的 HLS 模块，并固定到包含
-HLS 支持的提交 `a203373036723e0d98c6c49b67cf09a9ee299220`。
+电脑通过 `URT-1` 直接连接两台 HLS3950，当前选用社区维护的
+[`vassar-feetech-servo-sdk==1.5.0`](https://github.com/vassar-robotics/feetech-servo-sdk)。
+该版本同时提供高层 `ServoController` 和底层 `scservo_sdk.hls`。
 
-PyPI 的 `ftservo-python-sdk==2.0.0` wheel 发布于 HLS 模块加入之前，实际不包含
-`scservo_sdk/hls.py`。本项目不能只声明该 PyPI 包；应固定上述 Git 提交，或把经过许可证
-审查的 HLS SDK 代码作为受控依赖引入。
+安装真机依赖：
 
-其他官方库的定位如下：
+```bash
+uv sync --project software --extra hardware
+```
 
-| 使用场景 | 官方库 | 本项目是否采用 |
+截至 2026-06-15，依赖来源的核对结果如下：
+
+| 来源 | HLS 支持 | 结论 |
 | --- | --- | --- |
-| PC 通过 URT-1 直接控制 | `FTServo_Python` | 是，当前台架路线 |
-| Linux C++ 进程直接控制 | `FTServo_Linux` | 否 |
-| STM32Cube HAL 裸机项目 | `FTServo_stm32HAL` | 否 |
+| 官方 GitHub `FTServo_Python` | 包含 `scservo_sdk/hls.py` 和 `hls/` 示例 | 用于核对底层实现 |
+| 官方 PyPI `ftservo-python-sdk==2.0.0` | wheel 和 sdist 均缺少 `scservo_sdk/hls.py` | 不能用于 HLS3950 |
+| 社区 PyPI `vassar-feetech-servo-sdk==1.5.0` | wheel 和 sdist 均包含 HLS | 本项目当前选型 |
 
-## 电脑直接控制
+社区包内置的整个 `scservo_sdk` 目录与飞特官方提交
+`a203373036723e0d98c6c49b67cf09a9ee299220` 逐文件一致，可以替代 Git 依赖。
+它同样安装顶层 `scservo_sdk` 包，不应与 `ftservo-python-sdk` 同时安装。
 
-现有驱动板已由照片确认为飞特 `URT-1`。连接电脑后通过
-`/dev/ttyUSB*`、`/dev/ttyACM*` 或 Windows COM 端口直接采用：
+当前直接使用社区包的 `ServoController` 开展台架验证，不额外实现包装层。使用时必须明确其行为：
+
+- `connect()` 会检查各舵机相位，并把非零相位改为 `0`。
+- `write_position()` 和 `write_torque()` 会按需切换工作模式并使能扭矩。
+- `disconnect()` 会关闭所有已配置舵机的扭矩。
+- 电流单位、扭矩方向和保护行为仍需使用 HLS3950 实物验证。
 
 ```text
 电脑 -> USB -> 飞特驱动板/URT -> HLS3950 总线
@@ -29,38 +37,22 @@ PyPI 的 `ftservo-python-sdk==2.0.0` wheel 发布于 HLS 模块加入之前，�
                  外部 12V 电源
 ```
 
-这种方案适合当前项目的上位机、数据记录和 ROS 集成。官方 `FTServo_Python` 仓库已经包含
-`hls` 类以及 `hls/ping.py`、
-`hls/read_write.py` 示例，官方示例默认设备也是 `/dev/ttyUSB0`。
+完整供电和引脚要求见 [URT-1 接线](urt1-wiring.md)。USB 串口不保证硬实时，控制频率和急停策略必须通过实测确定。
 
-当前 Python `hls` 类已封装位置、速度和同步写入，但没有提供完整的恒力模式和电流读取便捷
-方法。底层通用读写 API 仍可访问模式地址
-`33`、目标扭矩地址 `44` 和当前电流地址 `69`，这些方法应集中实现在本仓库的
-`FeetechHlsTransport` 中，不能散落在业务代码里。
+## 已确认信息
 
-电脑直控适合位置控制、测试和非硬实时的低频力控。Linux/USB 串口不是硬实时系统，最终力控
-频率必须实测；急停建议采用独立的动力切断装置，而不是只依赖 Python 进程。
+| 项目 | 当前结论 |
+| --- | --- |
+| 接口 | 三线 TTL，`5264-3P`，GND/Vcc/Signal |
+| 电压 | 9V 至 12.6V，正式系统按 12V 设计 |
+| 位置范围 | 0 至 4096 对应 360 度 |
+| 输出接口 | 25T，外径约 5.9mm |
+| SDK 能力 | 位置、速度和同步位置写入 |
+| 底层地址 | 模式 33、目标扭矩 44、当前电流 69，仍需按手册和实机核对单位与行为 |
 
-HLS3950M-C001 官方规格书进一步确认它是三线 TTL 舵机，连接器为 `5264-3P`，引脚依次为
-`GND / Vcc / Signal-TTL`。URT-1 必须使用左侧 `G / V1 / S` 接口，完整接线见
-[URT-1 接线](urt1-wiring.md)。
+## 软件使用边界
 
-## 必须取得的资料
-
-1. HLS3950 对应硬件版本的官方用户手册。
-2. 串口总线协议、寄存器表和错误码说明。
-3. 接口电平、连接器引脚定义和半双工收发电路要求。
-4. 位置、速度、电流和温度反馈的单位与符号定义。
-5. 恒流、力矩或连续旋转模式的进入条件和保护限制。
-
-## 电气验证
-
-- HLS3950 官方额定输入范围为 9V 至 12.6V，本项目以稳定 12V 为设计点。
-- 测量单机空载、启动、堵转保护触发前的峰值电流。
-- 两台舵机使用独立 12V 动力电源，并与 URT-1 信号地共地。
-- 两台 HLS3950 官方堵转电流合计约 4.8A，电源和驱动板动力回路必须按实测峰值留余量。
-- 电源、线束、连接器和保险保护按实测峰值留出余量。
-- 使用示波器检查双机启动时母线压降和总线信号完整性。
+当前仓库尚未实现 HLS3950 专用传输类。台架程序可以直接调用 `ServoController`；夹爪级的双机协调、行程限制、故障联停和力控逻辑仍属于本项目，不由通用舵机 SDK 代替。
 
 ## 台架验证顺序
 
@@ -71,21 +63,11 @@ HLS3950M-C001 官方规格书进一步确认它是三线 TTL 舵机，连接器�
 5. 脱离传动机构完成连续运行测试。
 6. 接入皮带后从 10% 输出开始标定开合方向和行程。
 
-## 机械接口
-
-完整范围见[机械改造清单](mechanical-changes.md)。核心原则是把电机座、25T 花键连接件
-和 HTD3M 皮带轮拆成独立参数化零件，并增加机械限位和动力配电安装位。
-
-## 已确认能力
-
-- HLS3950 官方参数给出 0 至 4096 对应 360 度、25T/OD5.9mm 花键和 9V 至 12.6V 输入。
-- 官方产品页明确给出恒流模式、位置/速度/电流/温度反馈和地址 44 目标扭矩。
-- 官方 Python HLS 模块提供同步位置写入，因此位置模式不需要依赖两次独立串口写入。
-
 ## 未决问题
 
-- HLS3950 是否能在所需频率下同时返回位置和电流。
-- 恒流模式能否稳定用于低速夹持，而非仅作为电机内部限制值。
+- 寄存器、错误码、反馈单位和符号需与对应硬件版本手册逐项核对。
+- HLS3950 是否能以目标频率同时返回位置和电流。
+- 恒流模式能否稳定用于低速夹持。
 - URT-1 的动力通道持续载流能力，尤其是双机堵转附近的温升。
 - URT-1 在双机 1 Mbps 下的稳定性和最大反馈频率。
 
@@ -94,3 +76,5 @@ HLS3950M-C001 官方规格书进一步确认它是三线 TTL 舵机，连接器�
 - [飞特 HLS3950 产品页与规格书入口](https://www.feetechrc.com/563788.html)
 - [飞特 FTServo_Python](https://github.com/ftservo/FTServo_Python)
 - [FTServo_Python HLS 模块](https://github.com/ftservo/FTServo_Python/blob/a203373036723e0d98c6c49b67cf09a9ee299220/scservo_sdk/hls.py)
+- [官方 PyPI：ftservo-python-sdk](https://pypi.org/project/ftservo-python-sdk/)
+- [社区 SDK：vassar-feetech-servo-sdk](https://github.com/vassar-robotics/feetech-servo-sdk)

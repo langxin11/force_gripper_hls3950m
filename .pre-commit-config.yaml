@@ -4,11 +4,17 @@ repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
     hooks:
+      # 普通源文件限制 500KB
       - id: check-added-large-files
+        exclude: ^hardware/(cad|print_parts)/
+      # CAD 和打印件限制 5MB（分路径阈值，非错误重复）
+      - id: check-added-large-files
+        name: check CAD and print assets (max 5 MB)
+        args: [--maxkb=5000]
+        files: ^hardware/(cad|print_parts)/
       - id: check-merge-conflict
       - id: check-yaml
       - id: end-of-file-fixer
-        exclude: (^|/)\.gitkeep$
       - id: trailing-whitespace
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
