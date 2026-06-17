@@ -2,7 +2,7 @@
 # Copyright 2026
 # SPDX-License-Identifier: Apache-2.0
 #
-# File: hls3950_dual_readonly.py
+# File: hls_dual_readonly.py
 # Purpose: Perform read-only polling for two HLS3950 servos on the same TTL
 # bus. The script intentionally avoids any motion command, torque write, phase
 # write, or other configuration update.

@@ -22,17 +22,19 @@ docs/       中文架构、适配、装配与开发文档
 ## 快速验证
 
 ```bash
-make test         # 固件 + 上位机测试
+cmake -S firmware -B build/firmware
+cmake --build build/firmware
+ctest --test-dir build/firmware --output-on-failure
+uv run --project software --extra dev pytest software/tests -v
 ```
 
-或分步验证：
+如果只验证 Python 上位机：
 
 ```bash
-make test-firmware
-make test-software
+uv run --project software --extra dev pytest software/tests -v
 ```
 
-更多开发命令（包括文档构建、静态检查）见 `make help` 和[开发与测试](docs/development.md)。
+更多开发命令（包括文档构建、静态检查）见[开发与测试](docs/development.md)。
 
 ## 文档
 
@@ -46,8 +48,8 @@ make test-software
 严格构建文档或启动本地预览：
 
 ```bash
-make docs
-make docs-serve
+uv run --project software --extra docs mkdocs build --strict
+uv run --project software --extra docs mkdocs serve
 ```
 
 ## 开源许可

@@ -14,7 +14,7 @@ tests/                   单元测试
 零依赖仿真测试：
 
 ```bash
-make test-software
+uv run --project software --extra dev pytest software/tests -v
 PYTHONPATH=software/src python3 -m hls3950_gripper.cli --simulate status
 ```
 

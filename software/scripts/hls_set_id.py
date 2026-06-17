@@ -2,7 +2,7 @@
 # Copyright 2026
 # SPDX-License-Identifier: Apache-2.0
 #
-# File: hls3950_set_id.py
+# File: hls_set_id.py
 # Purpose: Safely change one HLS3950 servo ID over a direct URT-1/URT-2 TTL
 # link. The script only touches the ID register and EEPROM lock state. It does
 # not write phase, torque, position, speed, or any motion-related setting.

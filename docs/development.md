@@ -22,9 +22,6 @@ PYTHONPATH=software/src python3 -m hls3950_gripper.cli --simulate status
 ```
 pytest 兼容 unittest.TestCase，无需改写已有测试。
 
-```bash
-```
-
 开发环境安装：
 
 ```bash
@@ -43,16 +40,28 @@ uv run --project software --extra dev pre-commit install
 钩子会在提交时检查基础文件格式、YAML 和 Python Ruff 规则。也可以手动检查仓库中的全部文件：
 
 ```bash
-make hooks
+uv run --project software --extra dev pre-commit run --all-files
 ```
 
 完整检查包括固件与上位机测试、静态检查和文档严格构建：
 
 ```bash
-make check
+cmake -S firmware -B build/firmware
+cmake --build build/firmware
+ctest --test-dir build/firmware --output-on-failure
+uv run --project software --extra dev pytest software/tests -v
+uv run --project software --extra docs mkdocs build --strict
+uv run --project software --extra dev pre-commit run --all-files
+uv run --project software --extra dev mypy software/src
 ```
 
 依赖下载需要网络；基础 C++ 和 Python 单元测试不需要下载第三方依赖。
+
+如果本机环境会让 `pytest` 自动加载外部插件并导致冲突，可以只对当前命令临时禁用自动加载：
+
+```bash
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run --project software --extra dev pytest software/tests -v
+```
 
 ## 参见
 

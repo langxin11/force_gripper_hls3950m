@@ -2,7 +2,7 @@
 # Copyright 2026
 # SPDX-License-Identifier: Apache-2.0
 #
-# File: hls3950_single_readonly.py
+# File: hls_single_readonly.py
 # Purpose: Perform a read-only ping and telemetry snapshot for one HLS3950
 # servo through a URT-1/URT-2 style serial adapter. This script intentionally
 # avoids torque enable, motion commands, EEPROM writes, and phase changes.
