@@ -37,6 +37,8 @@ except ImportError as exc:  # pragma: no cover - 依赖真机环境
 
 DEFAULT_SAFE_DELTA = 50
 MAX_RECOMMENDED_DELTA = 100
+DEFAULT_POSITION_MIN = 0
+DEFAULT_POSITION_MAX = 4095
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -112,6 +114,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="最终位置允许误差，默认 20",
     )
     parser.add_argument(
+        "--position-min",
+        type=int,
+        default=DEFAULT_POSITION_MIN,
+        help="角度限位未配置时使用的保守最小位置，默认 0",
+    )
+    parser.add_argument(
+        "--position-max",
+        type=int,
+        default=DEFAULT_POSITION_MAX,
+        help="角度限位未配置时使用的保守最大位置，默认 4095",
+    )
+    parser.add_argument(
         "--return-to-start",
         action="store_true",
         help="到达目标后再返回起始位置，适合空载单机验证",
@@ -142,6 +156,46 @@ def read_angle_limits(packet_handler: scs.hls, servo_id: int) -> tuple[int, int]
     require_success("读取最大角度限位", packet_handler, comm_result, error)
 
     return packet_handler.scs_tohost(min_raw, 15), packet_handler.scs_tohost(max_raw, 15)
+
+
+def resolve_position_bounds(
+    raw_min_position: int,
+    raw_max_position: int,
+    fallback_min_position: int,
+    fallback_max_position: int,
+) -> tuple[int, int]:
+    """解析用于目标位置校验的有效位置边界。
+
+    Args:
+        raw_min_position: 从舵机 EEPROM 读到的最小角度限位。
+        raw_max_position: 从舵机 EEPROM 读到的最大角度限位。
+        fallback_min_position: 限位未配置时使用的脚本最小位置。
+        fallback_max_position: 限位未配置时使用的脚本最大位置。
+
+    Returns:
+        ``(min_position, max_position)`` 有效位置边界。
+
+    Raises:
+        ValueError: 舵机限位异常且无法安全降级时抛出。
+    """
+
+    if raw_max_position > raw_min_position:
+        return raw_min_position, raw_max_position
+
+    if raw_min_position == 0 and raw_max_position == 0:
+        print(
+            "[WARN] 舵机角度限位寄存器为 [0, 0]，按未配置限位处理。",
+            file=sys.stderr,
+        )
+        print(
+            f"[WARN] 本次目标位置校验改用脚本边界 [{fallback_min_position}, {fallback_max_position}]。",
+            file=sys.stderr,
+        )
+        return fallback_min_position, fallback_max_position
+
+    raise ValueError(
+        f"角度限位异常: min={raw_min_position}, max={raw_max_position}。请先检查舵机模式和参数。"
+    )
 
 
 def ensure_torque_enabled(packet_handler: scs.hls, servo_id: int) -> None:
@@ -184,11 +238,6 @@ def compute_target_position(
     Returns:
         校验通过的绝对目标位置。
     """
-
-    if max_position <= min_position:
-        raise ValueError(
-            f"角度限位异常: min={min_position}, max={max_position}。请先检查舵机模式和参数。"
-        )
 
     target_position = requested_target if requested_target is not None else current_position + delta
     if not min_position <= target_position <= max_position:
@@ -347,6 +396,8 @@ def validate_args(args: argparse.Namespace) -> None:
         raise SystemExit("poll-interval 必须大于 0")
     if args.tolerance < 0:
         raise SystemExit("tolerance 不能小于 0")
+    if args.position_max <= args.position_min:
+        raise SystemExit("position-max 必须大于 position-min")
 
 
 def main() -> int:
@@ -388,6 +439,13 @@ def main() -> int:
 
         min_position, max_position = read_angle_limits(packet_handler, args.servo_id)
         print(f"[INFO] angle_limit  = [{min_position}, {max_position}]")
+        min_position, max_position = resolve_position_bounds(
+            raw_min_position=min_position,
+            raw_max_position=max_position,
+            fallback_min_position=args.position_min,
+            fallback_max_position=args.position_max,
+        )
+        print(f"[INFO] safe_range   = [{min_position}, {max_position}]")
 
         target_position = compute_target_position(
             current_position=initial_snapshot.position,

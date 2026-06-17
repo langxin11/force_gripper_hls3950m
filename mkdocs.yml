@@ -26,6 +26,7 @@ nav:
   - HLS3950 通信适配: hls3950-adaptation.md
   - URT-1 接线: urt1-wiring.md
   - 机械设计与装配: mechanical.md
+  - 台架记录: bench-log.md
   - 主机通信协议: host-protocol.md
   - 开发与测试: development.md
 markdown_extensions:

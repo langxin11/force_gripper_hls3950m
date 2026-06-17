@@ -1,0 +1,33 @@
+# HLS3950 gripper software calibration.
+#
+# These limits are software guard rails for bench control scripts. They are not
+# written to servo EEPROM. Replace the placeholder positions after mechanical
+# calibration, keeping the range conservative at first.
+
+bus:
+  baudrate: 1000000
+
+servos:
+  left:
+    id: 1
+    # Smaller position opens the finger; larger position closes it.
+    # Reinstalled belt: both servos were aligned near 2047 at the open pose.
+    open_position: 2047
+    # TODO: calibrate with incremental close tests before using normalized control.
+    close_position: 0
+  right:
+    id: 2
+    # Smaller position opens the finger; larger position closes it.
+    # Reinstalled belt: both servos were aligned near 2047 at the open pose.
+    open_position: 2047
+    # TODO: calibrate with incremental close tests before using normalized control.
+    close_position: 0
+
+motion:
+  speed: 100
+  acc: 5
+  torque: 100
+  max_step: 50
+  tolerance: 20
+  poll_interval: 0.1
+  timeout: 3.0
