@@ -3,15 +3,13 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # File: hls_dual_readonly.py
-# Purpose: Perform read-only polling for two HLS3950 servos on the same TTL
-# bus. The script intentionally avoids any motion command, torque write, phase
-# write, or other configuration update.
+# Purpose: 对同一条 TTL 总线上的两台 HLS3950 舵机执行只读轮询。
+#           脚本故意回避了运动命令、力矩写入、相位写入或任何配置更改。
 
-"""Read-only dual-servo polling tool for HLS3950 bench validation.
+"""HLS3950 台架验证的双机只读轮询工具。
 
-This script is intended for the post-ID-assignment stage where two HLS3950
-servos share one TTL bus and need to be polled repeatedly without modifying any
-servo state.
+本脚本适用于 ID 分配后的阶段，此时两台 HLS3950 舵机共享一条 TTL 总线，
+需要在修改任何舵机状态的情况下持续轮询。
 """
 
 from __future__ import annotations
@@ -19,70 +17,22 @@ from __future__ import annotations
 import argparse
 import sys
 import time
-from dataclasses import dataclass
 
 try:
     import scservo_sdk as scs
-    from vassar_feetech_servo_sdk import find_servo_port
-except ImportError as exc:  # pragma: no cover - depends on local hardware setup
+
+    from hls3950_gripper.bus import open_bus, read_snapshot, resolve_port
+except ImportError as exc:  # pragma: no cover - 依赖真机环境
     raise SystemExit(
         "缺少真机调试依赖。请先执行: uv sync --project software --extra hardware"
     ) from exc
 
 
-HLS_PHASE_ADDR = 18
-
-
-@dataclass(frozen=True, slots=True)
-class ServoSnapshot:
-    """A read-only telemetry snapshot for one HLS3950 servo.
-
-    Attributes:
-        servo_id: Target servo ID.
-        model_number: Model number returned by ``ping``.
-        position: Present position register value.
-        voltage_volts: Present voltage in volts.
-        temperature_celsius: Present temperature in Celsius.
-        current_raw: Unsigned current register value.
-        current_signed: Signed interpretation of the current register.
-        phase: Current phase register value.
-        moving: Whether the servo reports a moving state.
-    """
-
-    servo_id: int
-    model_number: int
-    position: int
-    voltage_volts: float
-    temperature_celsius: int
-    current_raw: int
-    current_signed: int
-    phase: int
-    moving: bool
-
-    def format_summary(self) -> str:
-        """Format one compact terminal summary line.
-
-        Returns:
-            Human-readable one-line status for the current servo.
-        """
-
-        return (
-            f"ID {self.servo_id}: "
-            f"model={self.model_number} "
-            f"pos={self.position} "
-            f"volt={self.voltage_volts:.1f}V "
-            f"temp={self.temperature_celsius}C "
-            f"current={self.current_signed} "
-            f"phase={self.phase} "
-            f"moving={'yes' if self.moving else 'no'}"
-        )
-
-
 def build_parser() -> argparse.ArgumentParser:
-    """Build the command-line parser.
+    """构建命令行解析器。
 
     Returns:
-        Configured parser for dual-servo read-only polling.
+        配置好的双机只读轮询命令解析器。
     """
 
     parser = argparse.ArgumentParser(description="HLS3950 双机只读轮询脚本")
@@ -123,121 +73,11 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def resolve_port(port: str | None) -> str:
-    """Resolve the serial port to use.
-
-    Args:
-        port: User-supplied port or ``None`` for auto-detection.
-
-    Returns:
-        Concrete serial port path.
-    """
-
-    if port:
-        return port
-    return find_servo_port()
-
-
-def require_success(
-    operation: str,
-    packet_handler: scs.hls,
-    comm_result: int,
-    error: int,
-) -> None:
-    """Raise a descriptive error when a servo transaction fails.
-
-    Args:
-        operation: Human-readable operation name.
-        packet_handler: Active HLS packet handler.
-        comm_result: SDK communication status code.
-        error: Servo status error bitfield.
-
-    Raises:
-        RuntimeError: Raised when the communication or servo status is invalid.
-    """
-
-    if comm_result != scs.COMM_SUCCESS:
-        raise RuntimeError(f"{operation} 失败: {packet_handler.getTxRxResult(comm_result)}")
-    if error != 0:
-        raise RuntimeError(f"{operation} 返回舵机错误: {packet_handler.getRxPacketError(error)}")
-
-
-def open_bus(port: str, baudrate: int) -> tuple[scs.PortHandler, scs.hls]:
-    """Open the serial bus and create an HLS packet handler.
-
-    Args:
-        port: Serial port path.
-        baudrate: Requested baudrate.
-
-    Returns:
-        Tuple of the opened port handler and HLS packet handler.
-    """
-
-    port_handler = scs.PortHandler(port)
-    if not port_handler.openPort():
-        raise RuntimeError(f"无法打开串口: {port}")
-    if not port_handler.setBaudRate(baudrate):
-        port_handler.closePort()
-        raise RuntimeError(f"无法设置波特率: {baudrate}")
-    return port_handler, scs.hls(port_handler)
-
-
-def read_snapshot(packet_handler: scs.hls, servo_id: int) -> ServoSnapshot:
-    """Read one read-only snapshot from a single HLS3950 servo.
-
-    Args:
-        packet_handler: Initialized HLS packet handler.
-        servo_id: Servo ID to query.
-
-    Returns:
-        Snapshot populated from ping and status registers.
-    """
-
-    model_number, comm_result, error = packet_handler.ping(servo_id)
-    require_success(f"ID {servo_id} ping", packet_handler, comm_result, error)
-
-    position, comm_result, error = packet_handler.ReadPos(servo_id)
-    require_success(f"ID {servo_id} 读取位置", packet_handler, comm_result, error)
-
-    voltage_raw, comm_result, error = packet_handler.read1ByteTxRx(
-        servo_id, scs.HLS_PRESENT_VOLTAGE
-    )
-    require_success(f"ID {servo_id} 读取电压", packet_handler, comm_result, error)
-
-    temperature_celsius, comm_result, error = packet_handler.read1ByteTxRx(
-        servo_id, scs.HLS_PRESENT_TEMPERATURE
-    )
-    require_success(f"ID {servo_id} 读取温度", packet_handler, comm_result, error)
-
-    current_raw, comm_result, error = packet_handler.read2ByteTxRx(
-        servo_id, scs.HLS_PRESENT_CURRENT_L
-    )
-    require_success(f"ID {servo_id} 读取电流", packet_handler, comm_result, error)
-
-    phase, comm_result, error = packet_handler.read1ByteTxRx(servo_id, HLS_PHASE_ADDR)
-    require_success(f"ID {servo_id} 读取相位", packet_handler, comm_result, error)
-
-    moving_raw, comm_result, error = packet_handler.ReadMoving(servo_id)
-    require_success(f"ID {servo_id} 读取运动状态", packet_handler, comm_result, error)
-
-    return ServoSnapshot(
-        servo_id=servo_id,
-        model_number=model_number,
-        position=position,
-        voltage_volts=voltage_raw * 0.1,
-        temperature_celsius=temperature_celsius,
-        current_raw=current_raw,
-        current_signed=packet_handler.scs_tohost(current_raw, 15),
-        phase=phase,
-        moving=bool(moving_raw),
-    )
-
-
 def main() -> int:
-    """Run the command-line entry point.
+    """命令行入口。
 
     Returns:
-        Process exit code. ``0`` means all polling rounds succeeded.
+        进程退出码。``0`` 表示所有轮询轮次成功。
     """
 
     args = build_parser().parse_args()
@@ -274,7 +114,7 @@ def main() -> int:
 
         print("[DONE] 双机只读轮询完成。")
         return 0
-    except Exception as exc:  # pragma: no cover - depends on live hardware
+    except Exception as exc:  # pragma: no cover - 依赖真机环境
         print(f"[FAIL] 双机只读轮询失败: {exc}", file=sys.stderr)
         return 1
     finally:

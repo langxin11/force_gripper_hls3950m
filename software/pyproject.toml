@@ -48,7 +48,9 @@ strict = true
 [[tool.mypy.overrides]]
 module = [
     "serial.*",
+    "scservo_sdk",
     "scservo_sdk.*",
+    "vassar_feetech_servo_sdk",
     "vassar_feetech_servo_sdk.*",
 ]
 ignore_missing_imports = true

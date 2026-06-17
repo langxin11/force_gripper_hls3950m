@@ -3,16 +3,14 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # File: hls_single_readonly.py
-# Purpose: Perform a read-only ping and telemetry snapshot for one HLS3950
-# servo through a URT-1/URT-2 style serial adapter. This script intentionally
-# avoids torque enable, motion commands, EEPROM writes, and phase changes.
+# Purpose: 通过 URT-1/URT-2 串口适配器对单台 HLS3950 舵机执行只读 ping 和遥测快照。
+#           脚本故意回避了力矩使能、运动指令、EEPROM 写入和相位更改。
 
-"""Read-only ping and status tool for a single HLS3950 servo.
+"""单台 HLS3950 舵机只读 ping 和状态读取工具。
 
-The script talks to the HLS protocol directly through ``scservo_sdk.hls`` so it
-can remain read-only. It does not use ``ServoController.connect()`` because the
-high-level controller normalizes servo phase during connect, which is a write
-operation and unsuitable for first-pass bench checks.
+脚本通过 ``scservo_sdk.hls`` 直接与 HLS 协议通信，确保只读操作。
+不使用 ``ServoController.connect()``，因为高层控制器在连接时会将舵机相位归零，
+这是写操作，不适合首轮台架检查。
 """
 
 from __future__ import annotations
@@ -23,71 +21,25 @@ from dataclasses import dataclass
 
 try:
     import scservo_sdk as scs
-    from vassar_feetech_servo_sdk import find_servo_port
-except ImportError as exc:  # pragma: no cover - depends on local hardware setup
+
+    from hls3950_gripper.bus import open_bus, read_snapshot, require_success, resolve_port
+except ImportError as exc:  # pragma: no cover - 依赖真机环境
     raise SystemExit(
         "缺少真机调试依赖。请先执行: uv sync --project software --extra hardware"
     ) from exc
 
 
-HLS_PHASE_ADDR = 18
 DEFAULT_SCAN_BAUDRATES = [1_000_000, 500_000, 250_000, 128_000, 115_200, 57_600, 38_400]
 
 
 @dataclass(frozen=True, slots=True)
-class ServoSnapshot:
-    """A read-only telemetry snapshot captured from one servo.
-
-    Attributes:
-        servo_id: Target servo ID on the TTL bus.
-        model_number: Model number returned by ``ping``.
-        position: Present position register value.
-        voltage_volts: Present voltage in volts.
-        temperature_celsius: Present temperature in Celsius.
-        current_raw: Unsigned current register value from the servo.
-        current_signed: Signed interpretation of the current register.
-        phase: Present phase register value.
-        moving: Whether the servo reports a moving state.
-    """
-
-    servo_id: int
-    model_number: int
-    position: int
-    voltage_volts: float
-    temperature_celsius: int
-    current_raw: int
-    current_signed: int
-    phase: int
-    moving: bool
-
-    def format_lines(self) -> list[str]:
-        """Render terminal-friendly output lines for the snapshot.
-
-        Returns:
-            Human-readable lines that can be printed directly to the terminal.
-        """
-
-        return [
-            f"[PASS] ID {self.servo_id} ping 成功",
-            f"  model_number : {self.model_number}",
-            f"  position     : {self.position}",
-            f"  voltage      : {self.voltage_volts:.1f} V",
-            f"  temperature  : {self.temperature_celsius} C",
-            f"  current_raw  : {self.current_raw}",
-            f"  current      : {self.current_signed}",
-            f"  phase        : {self.phase}",
-            f"  moving       : {'yes' if self.moving else 'no'}",
-        ]
-
-
-@dataclass(frozen=True, slots=True)
 class PingResult:
-    """A successful read-only ping result.
+    """一次成功的只读 ping 结果。
 
     Attributes:
-        servo_id: Servo ID that replied.
-        baudrate: Baudrate used for the successful ping.
-        model_number: Model number returned by the servo.
+        servo_id: 响应回复的舵机 ID。
+        baudrate: 成功 ping 所使用的波特率。
+        model_number: 舵机返回的型号值。
     """
 
     servo_id: int
@@ -96,10 +48,10 @@ class PingResult:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    """Build the command-line parser.
+    """构建命令行解析器。
 
     Returns:
-        Configured parser for the single-servo read-only diagnostic command.
+        配置好的单机只读诊断命令解析器。
     """
 
     parser = argparse.ArgumentParser(description="HLS3950 单机只读 ping/状态读取脚本")
@@ -145,53 +97,14 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def resolve_port(port: str | None) -> str:
-    """Resolve the serial port to use for the diagnostic.
-
-    Args:
-        port: User-supplied serial port or ``None`` for auto-detection.
-
-    Returns:
-        A concrete serial port path.
-    """
-
-    if port:
-        return port
-    return find_servo_port()
-
-
-def require_success(
-    operation: str,
-    packet_handler: scs.hls,
-    comm_result: int,
-    error: int,
-) -> None:
-    """Raise a descriptive error when a servo transaction fails.
-
-    Args:
-        operation: Human-readable operation name.
-        packet_handler: Active HLS packet handler.
-        comm_result: SDK communication status code.
-        error: Servo status error bitfield.
-
-    Raises:
-        RuntimeError: Raised when the communication or servo status is invalid.
-    """
-
-    if comm_result != scs.COMM_SUCCESS:
-        raise RuntimeError(f"{operation} 失败: {packet_handler.getTxRxResult(comm_result)}")
-    if error != 0:
-        raise RuntimeError(f"{operation} 返回舵机错误: {packet_handler.getRxPacketError(error)}")
-
-
 def parse_baudrates(value: str) -> list[int]:
-    """Parse a comma-separated baudrate list.
+    """解析逗号分隔的波特率列表。
 
     Args:
-        value: Comma-separated baudrate string.
+        value: 逗号分隔的波特率字符串。
 
     Returns:
-        Parsed baudrate list without duplicates while preserving order.
+        去重且保持顺序的波特率列表。
     """
 
     seen: set[int] = set()
@@ -204,41 +117,18 @@ def parse_baudrates(value: str) -> list[int]:
     return baudrates
 
 
-def open_bus(port: str, baudrate: int) -> tuple[scs.PortHandler, scs.hls]:
-    """Open the serial bus and create an HLS packet handler.
-
-    Args:
-        port: Serial port path.
-        baudrate: Requested baudrate.
-
-    Returns:
-        Tuple of the opened port handler and HLS packet handler.
-
-    Raises:
-        RuntimeError: Raised when the port cannot be opened or configured.
-    """
-
-    port_handler = scs.PortHandler(port)
-    if not port_handler.openPort():
-        raise RuntimeError(f"无法打开串口: {port}")
-    if not port_handler.setBaudRate(baudrate):
-        port_handler.closePort()
-        raise RuntimeError(f"无法设置波特率: {baudrate}")
-    return port_handler, scs.hls(port_handler)
-
-
 def try_ping(packet_handler: scs.hls, servo_id: int) -> PingResult | None:
-    """Try a read-only ping without raising on timeout.
+    """尝试只读 ping，超时不报异常。
 
     Args:
-        packet_handler: Initialized HLS packet handler.
-        servo_id: Servo ID to query.
+        packet_handler: 已初始化的 HLS 数据包处理器。
+        servo_id: 要查询的舵机 ID。
 
     Returns:
-        Successful ping result, or ``None`` when the servo does not reply.
+        ping 成功的结果，舵机无回应时返回 ``None``。
 
     Raises:
-        RuntimeError: Raised when the servo replies with an error packet.
+        RuntimeError: 舵机回复错误包时抛出。
     """
 
     model_number, comm_result, error = packet_handler.ping(servo_id)
@@ -252,73 +142,22 @@ def try_ping(packet_handler: scs.hls, servo_id: int) -> PingResult | None:
     )
 
 
-def read_snapshot(packet_handler: scs.hls, servo_id: int) -> ServoSnapshot:
-    """Read a single read-only telemetry snapshot from one HLS3950 servo.
-
-    Args:
-        packet_handler: Initialized HLS packet handler.
-        servo_id: Servo ID to query.
-
-    Returns:
-        Snapshot populated from read-only ping and status registers.
-    """
-
-    model_number, comm_result, error = packet_handler.ping(servo_id)
-    require_success("ping", packet_handler, comm_result, error)
-
-    position, comm_result, error = packet_handler.ReadPos(servo_id)
-    require_success("读取位置", packet_handler, comm_result, error)
-
-    voltage_raw, comm_result, error = packet_handler.read1ByteTxRx(
-        servo_id, scs.HLS_PRESENT_VOLTAGE
-    )
-    require_success("读取电压", packet_handler, comm_result, error)
-
-    temperature_celsius, comm_result, error = packet_handler.read1ByteTxRx(
-        servo_id, scs.HLS_PRESENT_TEMPERATURE
-    )
-    require_success("读取温度", packet_handler, comm_result, error)
-
-    current_raw, comm_result, error = packet_handler.read2ByteTxRx(
-        servo_id, scs.HLS_PRESENT_CURRENT_L
-    )
-    require_success("读取电流", packet_handler, comm_result, error)
-
-    phase, comm_result, error = packet_handler.read1ByteTxRx(servo_id, HLS_PHASE_ADDR)
-    require_success("读取相位", packet_handler, comm_result, error)
-
-    moving_raw, comm_result, error = packet_handler.ReadMoving(servo_id)
-    require_success("读取运动状态", packet_handler, comm_result, error)
-
-    return ServoSnapshot(
-        servo_id=servo_id,
-        model_number=model_number,
-        position=position,
-        voltage_volts=voltage_raw * 0.1,
-        temperature_celsius=temperature_celsius,
-        current_raw=current_raw,
-        current_signed=packet_handler.scs_tohost(current_raw, 15),
-        phase=phase,
-        moving=bool(moving_raw),
-    )
-
-
 def scan_bus(
     port: str,
     baudrates: list[int],
     servo_id_min: int,
     servo_id_max: int,
 ) -> list[PingResult]:
-    """Perform a read-only scan across baudrates and servo IDs.
+    """跨波特率和 ID 执行只读扫描。
 
     Args:
-        port: Serial port path.
-        baudrates: Baudrates to probe.
-        servo_id_min: Inclusive lower bound for the ID sweep.
-        servo_id_max: Inclusive upper bound for the ID sweep.
+        port: 串口路径。
+        baudrates: 要探测的波特率列表。
+        servo_id_min: ID 扫描的下界（含）。
+        servo_id_max: ID 扫描的上界（含）。
 
     Returns:
-        All successful ping results discovered during the scan.
+        扫描过程中发现的所有成功 ping 结果。
     """
 
     found: list[PingResult] = []
@@ -343,12 +182,12 @@ def scan_bus(
 
 
 def print_timeout_hints(port: str, baudrate: int, servo_id: int) -> None:
-    """Print targeted troubleshooting hints for ping timeout cases.
+    """打印 ping 超时场景的针对性排查提示。
 
     Args:
-        port: Serial port used for the failed probe.
-        baudrate: Baudrate used for the failed probe.
-        servo_id: Servo ID used for the failed probe.
+        port: 失败探测使用的串口。
+        baudrate: 失败探测使用的波特率。
+        servo_id: 失败探测使用的舵机 ID。
     """
 
     print("[HINT] 当前故障是串口打开成功，但目标舵机没有返回状态包。", file=sys.stderr)
@@ -383,10 +222,10 @@ def print_timeout_hints(port: str, baudrate: int, servo_id: int) -> None:
 
 
 def main() -> int:
-    """Run the command-line entry point.
+    """命令行入口。
 
     Returns:
-        Process exit code. ``0`` means the read-only check succeeded.
+        进程退出码。``0`` 表示只读检查成功。
     """
 
     args = build_parser().parse_args()
@@ -428,7 +267,7 @@ def main() -> int:
             print(line)
         print("[DONE] 单机只读检查完成。")
         return 0
-    except Exception as exc:  # pragma: no cover - depends on live hardware
+    except Exception as exc:  # pragma: no cover - 依赖真机环境
         print(f"[FAIL] 单机只读检查失败: {exc}", file=sys.stderr)
         if "There is no status packet" in str(exc):
             print_timeout_hints(port, args.baudrate, args.servo_id)

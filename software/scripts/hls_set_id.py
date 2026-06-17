@@ -3,15 +3,14 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # File: hls_set_id.py
-# Purpose: Safely change one HLS3950 servo ID over a direct URT-1/URT-2 TTL
-# link. The script only touches the ID register and EEPROM lock state. It does
-# not write phase, torque, position, speed, or any motion-related setting.
+# Purpose: 通过 URT-1/URT-2 TTL 直连，安全修改单台 HLS3950 舵机 ID。
+#           脚本仅操作 ID 寄存器和 EEPROM 锁状态，不写入相位、力矩、
+#           位置、速度或任何运动相关配置。
 
-"""Safely change a single HLS3950 servo ID.
+"""单台 HLS3950 舵机安全改 ID 工具。
 
-This script is intended for the exact bench workflow where only one servo is
-connected to the TTL bus. It reads the old ID, unlocks EEPROM, writes the new
-ID, locks EEPROM again, and verifies that the servo responds on the new ID.
+要求总线上仅连接一台舵机。流程：读取旧 ID → 解锁 EEPROM → 写入新 ID →
+锁定 EEPROM → 校验旧 ID 不再响应、新 ID 可响应。
 """
 
 from __future__ import annotations
@@ -22,18 +21,19 @@ import time
 
 try:
     import scservo_sdk as scs
-    from vassar_feetech_servo_sdk import find_servo_port
-except ImportError as exc:  # pragma: no cover - depends on local hardware setup
+
+    from hls3950_gripper.bus import open_bus, require_success, resolve_port
+except ImportError as exc:  # pragma: no cover - 依赖真机环境
     raise SystemExit(
         "缺少真机调试依赖。请先执行: uv sync --project software --extra hardware"
     ) from exc
 
 
 def build_parser() -> argparse.ArgumentParser:
-    """Build the command-line parser.
+    """构建命令行解析器。
 
     Returns:
-        Configured parser for the HLS3950 ID change command.
+        配置好的 HLS3950 改 ID 命令解析器。
     """
 
     parser = argparse.ArgumentParser(description="HLS3950 单机安全改 ID 脚本")
@@ -62,30 +62,15 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def resolve_port(port: str | None) -> str:
-    """Resolve the serial port to use.
-
-    Args:
-        port: User-specified port or ``None`` for auto-detection.
-
-    Returns:
-        Concrete serial port path.
-    """
-
-    if port:
-        return port
-    return find_servo_port()
-
-
 def validate_ids(old_id: int, new_id: int) -> None:
-    """Validate source and target IDs.
+    """校验新旧 ID 的合法性。
 
     Args:
-        old_id: Current servo ID.
-        new_id: Target servo ID.
+        old_id: 当前舵机 ID。
+        new_id: 目标舵机 ID。
 
     Raises:
-        ValueError: Raised when either ID is invalid for the Feetech protocol.
+        ValueError: ID 超出 Feetech 协议允许范围时抛出。
     """
 
     if not 0 <= old_id <= scs.MAX_ID:
@@ -96,59 +81,15 @@ def validate_ids(old_id: int, new_id: int) -> None:
         raise ValueError("旧 ID 和新 ID 相同，无需修改")
 
 
-def require_success(
-    operation: str,
-    packet_handler: scs.hls,
-    comm_result: int,
-    error: int,
-) -> None:
-    """Raise a descriptive error for failed servo communication.
-
-    Args:
-        operation: Human-readable operation name.
-        packet_handler: Active HLS packet handler.
-        comm_result: SDK communication result.
-        error: Servo status error bitfield.
-
-    Raises:
-        RuntimeError: Raised when the operation fails.
-    """
-
-    if comm_result != scs.COMM_SUCCESS:
-        raise RuntimeError(f"{operation} 失败: {packet_handler.getTxRxResult(comm_result)}")
-    if error != 0:
-        raise RuntimeError(f"{operation} 返回舵机错误: {packet_handler.getRxPacketError(error)}")
-
-
-def open_bus(port: str, baudrate: int) -> tuple[scs.PortHandler, scs.hls]:
-    """Open the serial bus and create an HLS packet handler.
-
-    Args:
-        port: Serial port path.
-        baudrate: Requested baudrate.
-
-    Returns:
-        Tuple of the opened port handler and HLS packet handler.
-    """
-
-    port_handler = scs.PortHandler(port)
-    if not port_handler.openPort():
-        raise RuntimeError(f"无法打开串口: {port}")
-    if not port_handler.setBaudRate(baudrate):
-        port_handler.closePort()
-        raise RuntimeError(f"无法设置波特率: {baudrate}")
-    return port_handler, scs.hls(port_handler)
-
-
 def ping_or_raise(packet_handler: scs.hls, servo_id: int) -> int:
-    """Ping one servo and return its model number.
+    """Ping 一台舵机并返回其型号。
 
     Args:
-        packet_handler: Active HLS packet handler.
-        servo_id: Target servo ID.
+        packet_handler: 已初始化的 HLS 数据包处理器。
+        servo_id: 目标舵机 ID。
 
     Returns:
-        Model number returned by the servo.
+        舵机返回的型号值。
     """
 
     model_number, comm_result, error = packet_handler.ping(servo_id)
@@ -157,12 +98,12 @@ def ping_or_raise(packet_handler: scs.hls, servo_id: int) -> int:
 
 
 def write_new_id(packet_handler: scs.hls, old_id: int, new_id: int) -> None:
-    """Unlock EEPROM, change ID, and lock EEPROM again.
+    """解锁 EEPROM，写入新 ID，重新锁定 EEPROM。
 
     Args:
-        packet_handler: Active HLS packet handler.
-        old_id: Current servo ID.
-        new_id: Target servo ID.
+        packet_handler: 已初始化的 HLS 数据包处理器。
+        old_id: 当前舵机 ID。
+        new_id: 目标舵机 ID。
     """
 
     comm_result, error = packet_handler.unLockEprom(old_id)
@@ -184,10 +125,10 @@ def write_new_id(packet_handler: scs.hls, old_id: int, new_id: int) -> None:
 
 
 def main() -> int:
-    """Run the command-line entry point.
+    """命令行入口。
 
     Returns:
-        Process exit code. ``0`` means the ID change succeeded.
+        进程退出码。``0`` 表示改 ID 成功。
     """
 
     args = build_parser().parse_args()
@@ -225,7 +166,7 @@ def main() -> int:
         print(f"[PASS] 新 ID {args.new_id} 在线，model_number={new_model_number}")
         print("[DONE] ID 修改完成。建议断电重上电后再次只读确认。")
         return 0
-    except Exception as exc:  # pragma: no cover - depends on live hardware
+    except Exception as exc:  # pragma: no cover - 依赖真机环境
         print(f"[FAIL] 改 ID 失败: {exc}", file=sys.stderr)
         return 1
     finally:
