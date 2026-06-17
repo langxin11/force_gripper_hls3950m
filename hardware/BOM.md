@@ -10,7 +10,7 @@
 | 飞特 USB 总线板   | URT-1 或 URT-2                           |    1 | 必需        | 当前原型使用 URT-1。                                                       |
 | USB 数据线        | 支持数据传输，接口按总线板实物选择       |    1 | 必需        | URT-1 常见 Mini USB，URT-2 常见 USB-C。                                    |
 | HLS3950 舵机线束  | 5264-3P，GND/Vcc/Signal-TTL              |    2 | 可复用      | 舵机自带；不要只按线色接线。                                               |
-| TTL 总线分线/端子 | 3 线并联，GND/Vcc/Signal                 |    1 | 待 CAD 确认 | 当前原型接法：`12V -> URT-1 8V-24V -> TTL G/S/V -> HLS3950`。              |
+| TTL 总线分线/端子 | 3 线并联，GND/Vcc/Signal                 |    1 | 待 CAD 确认 | 当前原型接法：`12V -> URT-1 DC6V-9V/V1 -> TTL G/S/V -> HLS3950`。          |
 
 ## 供电与保护
 
