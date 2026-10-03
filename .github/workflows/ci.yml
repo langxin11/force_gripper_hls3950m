@@ -24,7 +24,7 @@ jobs:
       - run: uv sync --project software --extra dev --frozen
       - run: uv run --project software pytest software/tests
       - run: uv run --project software pre-commit run --all-files
-      - run: uv run --project software mypy software/src
+      - run: uv run --project software mypy --config-file software/pyproject.toml software/src
 
   docs:
     runs-on: ubuntu-latest
